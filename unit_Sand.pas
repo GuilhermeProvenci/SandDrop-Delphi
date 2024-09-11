@@ -12,11 +12,15 @@ type
     Timer1: TTimer;
     tbrRadius: TTrackBar;
     btnReset: TButton;
+    btnRain: TButton;
+    RainTimer: TTimer;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure Timer1Timer(Sender: TObject);
     procedure btnResetClick(Sender: TObject);
+    procedure btnRainClick(Sender: TObject);
+    procedure RainTimerTimer(Sender: TObject);
   private
     SandMatrix: TArray<TArray<Boolean>>;
     ColorMatrix: TArray<TArray<TColor>>;
@@ -27,6 +31,7 @@ type
     procedure DrawCell(X, Y: Integer; Color: TColor);
     function HSVToColor(H, S, V: Single): TColor;
     function InterpolateColor(Color1, Color2: TColor; Factor: Single): TColor;
+    procedure StartRain;
   public
   end;
 
@@ -251,6 +256,30 @@ begin
     PaintBox1.Invalidate
   else
     Timer1.Enabled := False;
+end;
+
+
+procedure TForm1.StartRain;
+var
+  i, x: Integer;
+begin
+  Timer1.Enabled := true;
+
+  for i := 0 to 48 do
+  begin
+    x := Random(MatrixSize); // Gera uma posição aleatória na linha
+    DropSand(x, 0);
+  end;
+end;
+
+procedure TForm1.RainTimerTimer(Sender: TObject);
+begin
+StartRain;
+end;
+
+procedure TForm1.btnRainClick(Sender: TObject);
+begin
+RainTimer.Enabled := True;
 end;
 
 end.
