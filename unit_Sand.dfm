@@ -80,9 +80,24 @@ object Form1: TForm1
       ExplicitWidth = 105
       ExplicitHeight = 105
     end
+    object lblFPS: TLabel
+      Left = 10
+      Top = 10
+      Width = 50
+      Height = 20
+      Caption = 'FPS: 0'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clRed
+      Font.Height = -16
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+      Transparent = True
+    end
   end
   object Timer1: TTimer
     Enabled = False
+    Interval = 16
     OnTimer = Timer1Timer
     Left = 568
     Top = 328
