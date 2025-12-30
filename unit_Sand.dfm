@@ -59,7 +59,7 @@ object Form1: TForm1
       Left = 0
       Top = 60
       Width = 200
-      Height = 120
+      Height = 200
       Align = alTop
       BevelOuter = bvNone
       ParentBackground = False
@@ -70,7 +70,7 @@ object Form1: TForm1
         Width = 180
         Height = 21
         AutoSize = False
-        Caption = 'PINCEL'
+        Caption = 'SIMULA'#199#195'O'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = 12632256
         Font.Height = -13
@@ -78,12 +78,13 @@ object Form1: TForm1
         Font.Style = [fsBold]
         ParentFont = False
       end
-      object chkEraser: TCheckBox
+      object rbSand: TRadioButton
         Left = 10
         Top = 37
         Width = 180
-        Height = 25
-        Caption = 'Modo Borracha'
+        Height = 20
+        Caption = 'Areia'
+        Checked = True
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWhite
         Font.Height = -12
@@ -91,23 +92,66 @@ object Form1: TForm1
         Font.Style = []
         ParentFont = False
         TabOrder = 0
+        TabStop = True
+      end
+      object rbWater: TRadioButton
+        Left = 10
+        Top = 60
+        Width = 180
+        Height = 20
+        Caption = 'Aqua (Fluido)'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        TabOrder = 1
+      end
+      object rbStone: TRadioButton
+        Left = 10
+        Top = 83
+        Width = 180
+        Height = 20
+        Caption = 'Pedra (S'#243'lido)'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        TabOrder = 2
+      end
+      object chkEraser: TCheckBox
+        Left = 10
+        Top = 110
+        Width = 180
+        Height = 25
+        Caption = 'Apagador'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWhite
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = []
+        ParentFont = False
+        TabOrder = 3
       end
       object tbrRadius: TTrackBar
         Left = 5
-        Top = 68
+        Top = 145
         Width = 190
         Height = 45
         Hint = 'Raio do Pincel'
         Max = 50
         Position = 5
-        TabOrder = 1
+        TabOrder = 4
       end
     end
     object pnlActionGroup: TPanel
       Left = 0
-      Top = 180
+      Top = 260
       Width = 200
-      Height = 150
+      Height = 180
       Align = alTop
       BevelOuter = bvNone
       ParentBackground = False
@@ -143,6 +187,15 @@ object Form1: TForm1
         Caption = 'Chuva de Areia'
         TabOrder = 1
         OnClick = btnRainClick
+      end
+      object btnSpawnObstacle: TButton
+        Left = 10
+        Top = 127
+        Width = 180
+        Height = 35
+        Caption = 'Gerar Obst'#225'culo'
+        TabOrder = 2
+        OnClick = btnSpawnObstacleClick
       end
     end
   end

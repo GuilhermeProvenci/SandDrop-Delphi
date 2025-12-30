@@ -32,6 +32,10 @@ type
     lblBrushTitle: TLabel;
     pnlActionGroup: TPanel;
     lblActionTitle: TLabel;
+    rbSand: TRadioButton;
+    rbWater: TRadioButton;
+    rbStone: TRadioButton;
+    btnSpawnObstacle: TButton;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -40,6 +44,7 @@ type
     procedure btnResetClick(Sender: TObject);
     procedure btnRainClick(Sender: TObject);
     procedure RainTimerTimer(Sender: TObject);
+    procedure btnSpawnObstacleClick(Sender: TObject);
   private
     { Private declarations }
     FSandBuffer1, FSandBuffer2: TArray<Integer>;
@@ -80,6 +85,11 @@ const
   MatrixSize = 400; 
   CellSize = 2;     
   StepsPerFrame = 4;
+
+  MAT_EMPTY = 0;
+  MAT_SAND  = 1;
+  MAT_WATER = 2;
+  MAT_STONE = 3;
   
 var
   Form1: TForm1;
@@ -159,7 +169,7 @@ end;
 procedure TForm1.PaintBox1Paint(Sender: TObject);
 var
   LCanvas: TDirect2DCanvas;
-  X, Y: Integer;
+  X, Y, val: Integer;
   LSand: TArray<Integer>;
   LColors: TArray<TColor>;
   LinePtr: PRGBQuadArray;
@@ -175,9 +185,16 @@ begin
     LinePtr := FRenderBitmap.ScanLine[Y];
     for X := 0 to MatrixSize - 1 do
     begin
-      if LSand[Y * MatrixSize + X] = 1 then
+      val := LSand[Y * MatrixSize + X];
+      if val > 0 then
       begin
-        LColor := LColors[Y * MatrixSize + X];
+        case val of
+          MAT_SAND:  LColor := LColors[Y * MatrixSize + X]; // Multi-colored sand
+          MAT_WATER: LColor := clSkyBlue;
+          MAT_STONE: LColor := clDkGray;
+          else LColor := clWhite;
+        end;
+        
         LinePtr[X].R := GetRValue(LColor);
         LinePtr[X].G := GetGValue(LColor);
         LinePtr[X].B := GetBValue(LColor);
@@ -262,11 +279,14 @@ begin
         LIdx := GetIndex(LX, LY);
         if chkEraser.Checked then
         begin
-          LSand[LIdx] := 0;
+          LSand[LIdx] := MAT_EMPTY;
         end
-        else if LSand[LIdx] = 0 then
+        else if LSand[LIdx] = MAT_EMPTY then
         begin
-          LSand[LIdx] := 1;
+          if rbSand.Checked then LSand[LIdx] := MAT_SAND
+          else if rbWater.Checked then LSand[LIdx] := MAT_WATER
+          else if rbStone.Checked then LSand[LIdx] := MAT_STONE;
+          
           LColors[LIdx] := HSVToColor(FHueValue, 0.8, 0.9);
         end;
       end;
@@ -291,47 +311,64 @@ begin
 
   TParallel.For(0, MatrixSize - 1, TProc<Integer>(procedure(X: Integer)
   var
-    Y, CurrentIdx, BottomIdx, LocalMatrixSize: Integer;
+    Y, CurrentIdx, BottomIdx, LocalMatrixSize, mat: Integer;
   begin
     LocalMatrixSize := MatrixSize;
     for Y := LocalMatrixSize - 1 downto 0 do
     begin
       CurrentIdx := Y * LocalMatrixSize + X;
-      if LSand[CurrentIdx] = 1 then
+      mat := LSand[CurrentIdx];
+      if mat > MAT_EMPTY then
       begin
+        // STONE: Never moves
+        if mat = MAT_STONE then
+        begin
+          LNextSand[CurrentIdx] := MAT_STONE;
+          LNextColors[CurrentIdx] := LColors[CurrentIdx];
+          Continue;
+        end;
+
         if Y < LocalMatrixSize - 1 then
         begin
           BottomIdx := (Y + 1) * LocalMatrixSize + X;
           
-          // Down
-          if (LSand[BottomIdx] = 0) and (TInterlocked.CompareExchange(LNextSand[BottomIdx], 1, 0) = 0) then
+          // GRAVITY (Sand & Water)
+          if (LSand[BottomIdx] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[BottomIdx], mat, MAT_EMPTY) = MAT_EMPTY) then
           begin
             LNextColors[BottomIdx] := LColors[CurrentIdx];
             TInterlocked.Exchange(FCanMoveInt, 1);
           end
-          // Down-Left
-          else if (X > 0) and (LSand[BottomIdx - 1] = 0) and (TInterlocked.CompareExchange(LNextSand[BottomIdx - 1], 1, 0) = 0) then
+          // DIAGONAL (Sand & Water)
+          else if (X > 0) and (LSand[BottomIdx - 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[BottomIdx - 1], mat, MAT_EMPTY) = MAT_EMPTY) then
           begin
             LNextColors[BottomIdx - 1] := LColors[CurrentIdx];
             TInterlocked.Exchange(FCanMoveInt, 1);
           end
-          // Down-Right
-          else if (X < LocalMatrixSize - 1) and (LSand[BottomIdx + 1] = 0) and (TInterlocked.CompareExchange(LNextSand[BottomIdx + 1], 1, 0) = 0) then
+          else if (X < LocalMatrixSize - 1) and (LSand[BottomIdx + 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[BottomIdx + 1], mat, MAT_EMPTY) = MAT_EMPTY) then
           begin
             LNextColors[BottomIdx + 1] := LColors[CurrentIdx];
             TInterlocked.Exchange(FCanMoveInt, 1);
           end
+          // WATER SPREADING (Only for Water)
+          else if (mat = MAT_WATER) and (X > 0) and (LSand[CurrentIdx - 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[CurrentIdx - 1], MAT_WATER, MAT_EMPTY) = MAT_EMPTY) then
+          begin
+            LNextColors[CurrentIdx - 1] := LColors[CurrentIdx];
+            TInterlocked.Exchange(FCanMoveInt, 1);
+          end
+          else if (mat = MAT_WATER) and (X < LocalMatrixSize - 1) and (LSand[CurrentIdx + 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[CurrentIdx + 1], MAT_WATER, MAT_EMPTY) = MAT_EMPTY) then
+          begin
+            LNextColors[CurrentIdx + 1] := LColors[CurrentIdx];
+            TInterlocked.Exchange(FCanMoveInt, 1);
+          end
           else
           begin
-            // Direct assignment is safe here because no other grain can move into this cell in this step
-            LNextSand[CurrentIdx] := 1;
+            LNextSand[CurrentIdx] := mat;
             LNextColors[CurrentIdx] := LColors[CurrentIdx];
           end;
         end
         else
         begin
-          // Direct assignment is safe at the bottom boundary
-          LNextSand[CurrentIdx] := 1;
+          LNextSand[CurrentIdx] := mat;
           LNextColors[CurrentIdx] := LColors[CurrentIdx];
         end;
       end;
@@ -377,6 +414,28 @@ end;
 procedure TForm1.btnRainClick(Sender: TObject);
 begin
   RainTimer.Enabled := not RainTimer.Enabled;
+end;
+
+procedure TForm1.btnSpawnObstacleClick(Sender: TObject);
+var
+  i, j, CenterX, CenterY: Integer;
+  LSand: TArray<Integer>;
+begin
+  LSand := GetCurrentSand;
+  CenterX := MatrixSize div 2;
+  CenterY := MatrixSize div 2;
+  
+  // Create a large cross of stone in the middle
+  for i := -50 to 50 do
+    for j := -5 to 5 do
+    begin
+      // Horizontal bar
+      LSand[GetIndex(CenterX + i, CenterY + j)] := MAT_STONE;
+      // Vertical bar
+      LSand[GetIndex(CenterX + j, CenterY + i)] := MAT_STONE;
+    end;
+    
+  PaintBox1.Invalidate;
 end;
 
 function TForm1.HSVToColor(H, S, V: Single): TColor;
