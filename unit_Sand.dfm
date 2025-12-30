@@ -2,9 +2,11 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'Form1'
-  ClientHeight = 441
-  ClientWidth = 624
+  ClientHeight = 709
+  ClientWidth = 958
   Color = clBtnFace
+  DoubleBuffered = True
+  DoubleBufferedMode = dbmRequested
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
   Font.Height = -12
@@ -12,54 +14,75 @@ object Form1: TForm1
   Font.Style = []
   OnCreate = FormCreate
   TextHeight = 15
-  object PaintBox1: TPaintBox
-    Left = 0
-    Top = 0
-    Width = 624
-    Height = 346
-    Align = alClient
-    OnMouseMove = PaintBox1MouseMove
-    OnPaint = PaintBox1Paint
-    ExplicitLeft = 272
-    ExplicitTop = 192
-    ExplicitWidth = 105
-    ExplicitHeight = 105
-  end
   object tbrRadius: TTrackBar
     Left = 0
-    Top = 346
-    Width = 624
+    Top = 614
+    Width = 958
     Height = 45
     Hint = 'Raio do Pincel'
     Align = alBottom
     Max = 100
     Position = 5
     TabOrder = 0
-    ExplicitTop = 371
+    ExplicitTop = 346
+    ExplicitWidth = 624
   end
   object btnReset: TButton
     Left = 0
-    Top = 391
-    Width = 624
+    Top = 659
+    Width = 958
     Height = 25
     Align = alBottom
     Caption = 'Reset'
     TabOrder = 1
     OnClick = btnResetClick
-    ExplicitTop = 416
+    ExplicitTop = 391
+    ExplicitWidth = 624
   end
   object btnRain: TButton
     Left = 0
-    Top = 416
-    Width = 624
+    Top = 684
+    Width = 958
     Height = 25
     Align = alBottom
     Caption = 'Rain'
     TabOrder = 2
     OnClick = btnRainClick
-    ExplicitTop = 422
+    ExplicitTop = 416
+    ExplicitWidth = 624
+  end
+  object Panel1: TPanel
+    Left = 0
+    Top = 0
+    Width = 958
+    Height = 614
+    Align = alClient
+    DoubleBufferedMode = dbmRequested
+    TabOrder = 3
+    ExplicitLeft = 392
+    ExplicitTop = 352
+    ExplicitWidth = 185
+    ExplicitHeight = 41
+    object PaintBox1: TPaintBox
+      Left = 1
+      Top = 1
+      Width = 956
+      Height = 612
+      Margins.Left = 10
+      Margins.Top = 10
+      Margins.Right = 10
+      Margins.Bottom = 10
+      Align = alClient
+      OnMouseMove = PaintBox1MouseMove
+      OnPaint = PaintBox1Paint
+      ExplicitLeft = 272
+      ExplicitTop = 192
+      ExplicitWidth = 105
+      ExplicitHeight = 105
+    end
   end
   object Timer1: TTimer
+    Enabled = False
     OnTimer = Timer1Timer
     Left = 568
     Top = 328

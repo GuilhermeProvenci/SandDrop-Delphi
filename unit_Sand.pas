@@ -14,6 +14,7 @@ type
     btnReset: TButton;
     btnRain: TButton;
     RainTimer: TTimer;
+    Panel1: TPanel;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -76,7 +77,7 @@ begin
     if (X >= 0) and (Y >= 0) and (X < MatrixSize * CellSize) and (Y < MatrixSize * CellSize) then
     begin
       DropSand(X div CellSize, Y div CellSize);
-      Timer1.Enabled := True; // temporizador para animação
+      Timer1.Enabled := True;
     end;
   end;
 end;
@@ -93,8 +94,8 @@ begin
          (Y + j >= 0) and (Y + j < MatrixSize) then
       begin
         SandMatrix[X + i, Y + j] := True;
-        ColorMatrix[X + i, Y + j] := HSVToColor(HueValue, 1.0, 1.0); // cor
-        DrawCell(X + i, Y + j, ColorMatrix[X + i, Y + j]); // Desenha a célula
+        ColorMatrix[X + i, Y + j] := HSVToColor(HueValue, 1.0, 1.0); // cor, mas ta esquisito quando tem muito pixel
+        DrawCell(X + i, Y + j, ColorMatrix[X + i, Y + j]); // Desenha a célula, ver pra colocar thread pra ver se fica menos travado
       end;
 end;
 
@@ -104,7 +105,7 @@ begin
   with Bitmap.Canvas do
   begin
     Brush.Color := Color;
-    Pen.Style := psClear; // Remove as bordas
+    Pen.Style := psClear; //tira a borda preta do pixel
     Rectangle(
       X * CellSize,              // X inicial
       Y * CellSize,              // Y inicial
@@ -279,7 +280,7 @@ end;
 
 procedure TForm1.btnRainClick(Sender: TObject);
 begin
-RainTimer.Enabled := True;
+RainTimer.Enabled := not(RainTimer.Enabled);
 end;
 
 end.
