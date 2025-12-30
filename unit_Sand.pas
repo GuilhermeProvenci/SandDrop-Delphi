@@ -26,6 +26,12 @@ type
     lblFPS: TLabel;
     chkEraser: TCheckBox;
     pnlSidebar: TPanel;
+    pnlHeader: TPanel;
+    lblTitle: TLabel;
+    pnlBrushGroup: TPanel;
+    lblBrushTitle: TLabel;
+    pnlActionGroup: TPanel;
+    lblActionTitle: TLabel;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
