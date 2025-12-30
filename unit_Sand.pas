@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.StdCtrls,
-  Vcl.Direct2D, Winapi.D2D1, System.Threading, System.Math, System.Diagnostics;
+  vcl.Direct2D, Winapi.D2D1, System.Threading, System.Math, System.Diagnostics, System.SyncObjs;
 
 type
   // Tipo para acesso ultra-rápido aos pixels do bitmap
@@ -24,6 +24,8 @@ type
     Panel1: TPanel;
     PaintBox1: TPaintBox;
     lblFPS: TLabel;
+    chkEraser: TCheckBox;
+    pnlSidebar: TPanel;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -33,12 +35,12 @@ type
     procedure RainTimerTimer(Sender: TObject);
   private
     { Private declarations }
-    FSandBuffer1, FSandBuffer2: TArray<Byte>;
+    FSandBuffer1, FSandBuffer2: TArray<Integer>;
     FColorBuffer1, FColorBuffer2: TArray<TColor>;
     FCurrentBuffer: Integer; 
     
     FHueValue: Integer;
-    FCanMove: Boolean;
+    FCanMoveInt: Integer;
     
     // FPS e Performance
     FStopwatch: TStopwatch;
@@ -57,9 +59,9 @@ type
     procedure WMEraseBkgnd(var Msg: TWMEraseBkgnd); message WM_ERASEBKGND;
     
     procedure UpdateSimulation;
-    function GetCurrentSand: TArray<Byte>;
+    function GetCurrentSand: TArray<Integer>;
     function GetCurrentColors: TArray<TColor>;
-    function GetNextSand: TArray<Byte>;
+    function GetNextSand: TArray<Integer>;
     function GetNextColors: TArray<TColor>;
     procedure SwapBuffers;
     procedure UpdateFPS;
@@ -89,7 +91,7 @@ begin
   Msg.Result := 1;
 end;
 
-function TForm1.GetCurrentSand: TArray<Byte>;
+function TForm1.GetCurrentSand: TArray<Integer>;
 begin
   if FCurrentBuffer = 1 then Result := FSandBuffer1 else Result := FSandBuffer2;
 end;
@@ -99,7 +101,7 @@ begin
   if FCurrentBuffer = 1 then Result := FColorBuffer1 else Result := FColorBuffer2;
 end;
 
-function TForm1.GetNextSand: TArray<Byte>;
+function TForm1.GetNextSand: TArray<Integer>;
 begin
   if FCurrentBuffer = 1 then Result := FSandBuffer2 else Result := FSandBuffer1;
 end;
@@ -141,13 +143,15 @@ procedure TForm1.PaintBox1Paint(Sender: TObject);
 var
   LCanvas: TDirect2DCanvas;
   X, Y: Integer;
-  LSand: TArray<Byte>;
+  LSand: TArray<Integer>;
   LColors: TArray<TColor>;
   LinePtr: PRGBQuadArray;
   LColor: TColor;
 begin
   LSand := GetCurrentSand;
   LColors := GetCurrentColors;
+  
+  if (Length(LSand) = 0) or (Length(LColors) = 0) then Exit;
 
   for Y := 0 to MatrixSize - 1 do
   begin
@@ -176,8 +180,8 @@ begin
   LCanvas.BeginDraw;
   try
     LCanvas.RenderTarget.Clear(D2DColor(clWhite));
-    // Desenha o bitmap inteiro de uma vez via GPU usando StretchDraw para escala
-    LCanvas.StretchDraw(Rect(0, 0, FRenderBitmap.Width * CellSize, FRenderBitmap.Height * CellSize), FRenderBitmap);
+    // Desenha o bitmap inteiro de uma vez via GPU usando StretchDraw preenchendo a área disponível
+    LCanvas.StretchDraw(PaintBox1.ClientRect, FRenderBitmap);
   finally
     LCanvas.EndDraw;
     LCanvas.Free;
@@ -201,20 +205,32 @@ begin
 end;
 
 procedure TForm1.PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+var
+  SimX, SimY: Integer;
 begin
-  if ssLeft in Shift then
+  if (ssLeft in Shift) and (PaintBox1.Width > 0) and (PaintBox1.Height > 0) then
   begin
-    DropSand(X div CellSize, Y div CellSize);
-    Timer1.Enabled := True;
+    // Convert mouse pixels to simulation coordinates (400x400)
+    SimX := (X * MatrixSize) div PaintBox1.Width;
+    SimY := (Y * MatrixSize) div PaintBox1.Height;
+    
+    // Safety bounds
+    if SimX < 0 then SimX := 0;
+    if SimX >= MatrixSize then SimX := MatrixSize - 1;
+    if SimY < 0 then SimY := 0;
+    if SimY >= MatrixSize then SimY := MatrixSize - 1;
+    
+    DropSand(SimX, SimY);
   end;
 end;
 
 procedure TForm1.DropSand(X, Y: Integer);
 var
   i, j, LRadius, LX, LY, LIdx: Integer;
-  LSand: TArray<Byte>;
+  LSand: TArray<Integer>;
   LColors: TArray<TColor>;
 begin
+  Timer1.Enabled := True;
   LRadius := tbrRadius.Position;
   LSand := GetCurrentSand;
   LColors := GetCurrentColors;
@@ -227,7 +243,11 @@ begin
       if (Sqr(i) + Sqr(j) <= Sqr(LRadius)) and (LX >= 0) and (LX < MatrixSize) and (LY >= 0) and (LY < MatrixSize) then
       begin
         LIdx := GetIndex(LX, LY);
-        if LSand[LIdx] = 0 then
+        if chkEraser.Checked then
+        begin
+          LSand[LIdx] := 0;
+        end
+        else if LSand[LIdx] = 0 then
         begin
           LSand[LIdx] := 1;
           LColors[LIdx] := HSVToColor(FHueValue, 0.8, 0.9);
@@ -238,7 +258,7 @@ end;
 
 procedure TForm1.UpdateSimulation;
 var
-  LSand, LNextSand: TArray<Byte>;
+  LSand, LNextSand: TArray<Integer>;
   LColors, LNextColors: TArray<TColor>;
 begin
   LSand := GetCurrentSand;
@@ -246,10 +266,12 @@ begin
   LNextSand := GetNextSand;
   LNextColors := GetNextColors;
   
-  FillChar(LNextSand[0], Length(LNextSand), 0);
-  FCanMove := False;
+  if (Length(LSand) < MatrixSize * MatrixSize) or (Length(LNextSand) < MatrixSize * MatrixSize) then
+    Exit;
+    
+  FillChar(LNextSand[0], Length(LNextSand) * SizeOf(Integer), 0);
+  FCanMoveInt := 0;
 
-  // Processo em paralelo com cast explícito para evitar erro de sobrecarga
   TParallel.For(0, MatrixSize - 1, TProc<Integer>(procedure(X: Integer)
   var
     Y, CurrentIdx, BottomIdx, LocalMatrixSize: Integer;
@@ -260,42 +282,42 @@ begin
       CurrentIdx := Y * LocalMatrixSize + X;
       if LSand[CurrentIdx] = 1 then
       begin
-        if Y < MatrixSize - 1 then
+        if Y < LocalMatrixSize - 1 then
         begin
-          BottomIdx := (Y + 1) * MatrixSize + X;
+          BottomIdx := (Y + 1) * LocalMatrixSize + X;
           
-          if (LSand[BottomIdx] = 0) and (LNextSand[BottomIdx] = 0) then
+          // Down
+          if (LSand[BottomIdx] = 0) and (TInterlocked.CompareExchange(LNextSand[BottomIdx], 1, 0) = 0) then
           begin
-            LNextSand[BottomIdx] := 1;
             LNextColors[BottomIdx] := LColors[CurrentIdx];
-            FCanMove := True;
+            TInterlocked.Exchange(FCanMoveInt, 1);
           end
-          else if (X > 0) and (LSand[BottomIdx - 1] = 0) and (LNextSand[BottomIdx - 1] = 0) then
+          // Down-Left
+          else if (X > 0) and (LSand[BottomIdx - 1] = 0) and (TInterlocked.CompareExchange(LNextSand[BottomIdx - 1], 1, 0) = 0) then
           begin
-            LNextSand[BottomIdx - 1] := 1;
             LNextColors[BottomIdx - 1] := LColors[CurrentIdx];
-            FCanMove := True;
+            TInterlocked.Exchange(FCanMoveInt, 1);
           end
-          else if (X < MatrixSize - 1) and (LSand[BottomIdx + 1] = 0) and (LNextSand[BottomIdx + 1] = 0) then
+          // Down-Right
+          else if (X < LocalMatrixSize - 1) and (LSand[BottomIdx + 1] = 0) and (TInterlocked.CompareExchange(LNextSand[BottomIdx + 1], 1, 0) = 0) then
           begin
-            LNextSand[BottomIdx + 1] := 1;
             LNextColors[BottomIdx + 1] := LColors[CurrentIdx];
-            FCanMove := True;
+            TInterlocked.Exchange(FCanMoveInt, 1);
           end
           else
           begin
-            LNextSand[CurrentIdx] := 1;
+            TInterlocked.Exchange(LNextSand[CurrentIdx], 1);
             LNextColors[CurrentIdx] := LColors[CurrentIdx];
           end;
         end
         else
         begin
-          LNextSand[CurrentIdx] := 1;
+          TInterlocked.Exchange(LNextSand[CurrentIdx], 1);
           LNextColors[CurrentIdx] := LColors[CurrentIdx];
         end;
       end;
     end;
-  end);
+  end));
 
   SwapBuffers;
 end;
@@ -307,15 +329,16 @@ begin
   FHueValue := (FHueValue + 1) mod 360;
   for Step := 1 to StepsPerFrame do UpdateSimulation;
   PaintBox1.Invalidate;
-  if not FCanMove then Timer1.Enabled := False;
+  if FCanMoveInt = 0 then Timer1.Enabled := False;
 end;
 
 procedure TForm1.btnResetClick(Sender: TObject);
 var
-  LSand: TArray<Byte>;
+  LSand: TArray<Integer>;
 begin
   LSand := GetCurrentSand;
-  FillChar(LSand[0], Length(LSand), 0);
+  if Length(LSand) > 0 then
+    FillChar(LSand[0], Length(LSand) * SizeOf(Integer), 0);
   PaintBox1.Invalidate;
 end;
 
