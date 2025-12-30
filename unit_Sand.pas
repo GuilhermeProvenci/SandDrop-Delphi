@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.StdCtrls,
-  vcl.Direct2D, Winapi.D2D1, System.Threading, System.Math, System.Diagnostics, System.SyncObjs;
+  vcl.Direct2D, Winapi.D2D1, System.Threading, System.Math, System.Diagnostics, System.SyncObjs, Winapi.MMSystem;
 
 type
   // Tipo para acesso ultra-rápido aos pixels do bitmap
@@ -34,6 +34,7 @@ type
     lblActionTitle: TLabel;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure Timer1Timer(Sender: TObject);
     procedure btnResetClick(Sender: TObject);
@@ -143,6 +144,16 @@ begin
   
   DoubleBuffered := True;
   Panel1.DoubleBuffered := True;
+  
+  // High precision timer interval
+  timeBeginPeriod(1);
+  Timer1.Interval := 1;
+end;
+
+procedure TForm1.FormDestroy(Sender: TObject);
+begin
+  timeEndPeriod(1);
+  FRenderBitmap.Free;
 end;
 
 procedure TForm1.PaintBox1Paint(Sender: TObject);
@@ -312,13 +323,15 @@ begin
           end
           else
           begin
-            TInterlocked.Exchange(LNextSand[CurrentIdx], 1);
+            // Direct assignment is safe here because no other grain can move into this cell in this step
+            LNextSand[CurrentIdx] := 1;
             LNextColors[CurrentIdx] := LColors[CurrentIdx];
           end;
         end
         else
         begin
-          TInterlocked.Exchange(LNextSand[CurrentIdx], 1);
+          // Direct assignment is safe at the bottom boundary
+          LNextSand[CurrentIdx] := 1;
           LNextColors[CurrentIdx] := LColors[CurrentIdx];
         end;
       end;

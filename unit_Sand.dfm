@@ -13,6 +13,7 @@ object Form1: TForm1
   Font.Name = 'Segoe UI'
   Font.Style = []
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   TextHeight = 15
   object pnlSidebar: TPanel
     Left = 758
@@ -179,7 +180,7 @@ object Form1: TForm1
   end
   object Timer1: TTimer
     Enabled = False
-    Interval = 16
+    Interval = 1
     OnTimer = Timer1Timer
     Left = 568
     Top = 328
