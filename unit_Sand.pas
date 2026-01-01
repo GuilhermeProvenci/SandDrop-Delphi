@@ -5,7 +5,8 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.StdCtrls,
-  vcl.Direct2D, Winapi.D2D1, System.Threading, System.Math, System.Diagnostics, System.SyncObjs, Winapi.MMSystem;
+  vcl.Direct2D, Winapi.D2D1, System.Threading, System.Math, System.Diagnostics, System.SyncObjs, Winapi.MMSystem,
+  USandPhysics;
 
 type
   // Tipo para acesso ultra-rápido aos pixels do bitmap
@@ -85,11 +86,6 @@ const
   MatrixSize = 400; 
   CellSize = 2;     
   StepsPerFrame = 4;
-
-  MAT_EMPTY = 0;
-  MAT_SAND  = 1;
-  MAT_WATER = 2;
-  MAT_STONE = 3;
   
 var
   Form1: TForm1;
@@ -311,68 +307,11 @@ begin
 
   TParallel.For(0, MatrixSize - 1, TProc<Integer>(procedure(X: Integer)
   var
-    Y, CurrentIdx, BottomIdx, LocalMatrixSize, mat: Integer;
+    LCanMove: Integer;
   begin
-    LocalMatrixSize := MatrixSize;
-    for Y := LocalMatrixSize - 1 downto 0 do
-    begin
-      CurrentIdx := Y * LocalMatrixSize + X;
-      mat := LSand[CurrentIdx];
-      if mat > MAT_EMPTY then
-      begin
-        // STONE: Never moves
-        if mat = MAT_STONE then
-        begin
-          LNextSand[CurrentIdx] := MAT_STONE;
-          LNextColors[CurrentIdx] := LColors[CurrentIdx];
-          Continue;
-        end;
-
-        if Y < LocalMatrixSize - 1 then
-        begin
-          BottomIdx := (Y + 1) * LocalMatrixSize + X;
-          
-          // GRAVITY (Sand & Water)
-          if (LSand[BottomIdx] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[BottomIdx], mat, MAT_EMPTY) = MAT_EMPTY) then
-          begin
-            LNextColors[BottomIdx] := LColors[CurrentIdx];
-            TInterlocked.Exchange(FCanMoveInt, 1);
-          end
-          // DIAGONAL (Sand & Water)
-          else if (X > 0) and (LSand[BottomIdx - 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[BottomIdx - 1], mat, MAT_EMPTY) = MAT_EMPTY) then
-          begin
-            LNextColors[BottomIdx - 1] := LColors[CurrentIdx];
-            TInterlocked.Exchange(FCanMoveInt, 1);
-          end
-          else if (X < LocalMatrixSize - 1) and (LSand[BottomIdx + 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[BottomIdx + 1], mat, MAT_EMPTY) = MAT_EMPTY) then
-          begin
-            LNextColors[BottomIdx + 1] := LColors[CurrentIdx];
-            TInterlocked.Exchange(FCanMoveInt, 1);
-          end
-          // WATER SPREADING (Only for Water)
-          else if (mat = MAT_WATER) and (X > 0) and (LSand[CurrentIdx - 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[CurrentIdx - 1], MAT_WATER, MAT_EMPTY) = MAT_EMPTY) then
-          begin
-            LNextColors[CurrentIdx - 1] := LColors[CurrentIdx];
-            TInterlocked.Exchange(FCanMoveInt, 1);
-          end
-          else if (mat = MAT_WATER) and (X < LocalMatrixSize - 1) and (LSand[CurrentIdx + 1] = MAT_EMPTY) and (TInterlocked.CompareExchange(LNextSand[CurrentIdx + 1], MAT_WATER, MAT_EMPTY) = MAT_EMPTY) then
-          begin
-            LNextColors[CurrentIdx + 1] := LColors[CurrentIdx];
-            TInterlocked.Exchange(FCanMoveInt, 1);
-          end
-          else
-          begin
-            LNextSand[CurrentIdx] := mat;
-            LNextColors[CurrentIdx] := LColors[CurrentIdx];
-          end;
-        end
-        else
-        begin
-          LNextSand[CurrentIdx] := mat;
-          LNextColors[CurrentIdx] := LColors[CurrentIdx];
-        end;
-      end;
-    end;
+    LCanMove := 0;
+    TSandPhysics.ProcessColumn(X, MatrixSize, @LSand[0], @LNextSand[0], @LColors[0], @LNextColors[0], LCanMove);
+    if LCanMove <> 0 then TInterlocked.Exchange(FCanMoveInt, 1);
   end));
 
   SwapBuffers;
