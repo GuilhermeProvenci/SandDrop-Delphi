@@ -3,7 +3,10 @@ program SandDrop;
 uses
   Vcl.Forms,
   unit_Sand in 'unit_Sand.pas' {Form1},
-  USandPhysics in 'USandPhysics.pas',
+  USand.Constants in 'USand.Constants.pas',
+  USand.Physics in 'USand.Physics.pas',
+  USand.Renderer in 'USand.Renderer.pas',
+  USand.Engine in 'USand.Engine.pas',
   Vcl.Themes,
   Vcl.Styles,
   FluidForm in 'FluidForm.pas' {Form2};
