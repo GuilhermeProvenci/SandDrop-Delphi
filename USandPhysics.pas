@@ -41,64 +41,119 @@ var
   Dir: Integer;
   LSand, LNextSand: PIntArray;
   LColors, LNextColors: PColorArray;
+  OldVal: Integer;
+
+  // The Search-and-Rescue mechanism (Vertical Eruption)
+  procedure RescueParticle(PType: Integer; PColor: TColor; StartY: Integer);
+  var
+    RY, RIdx: Integer;
+  begin
+    // Scan UPWARDS from StartY to find the first available hole in the next buffer
+    for RY := StartY downto 0 do
+    begin
+      RIdx := RY * MatrixSize + X;
+      if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+      begin
+        LNextColors[RIdx] := PColor;
+        Exit;
+      end;
+    end;
+    
+    // Extreme Emergency: search immediate neighbors if current column is completely full
+    if (X > 0) then
+    begin
+      for RY := StartY downto 0 do
+      begin
+        RIdx := RY * MatrixSize + (X - 1);
+        if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+        begin
+          LNextColors[RIdx] := PColor;
+          Exit;
+        end;
+      end;
+    end;
+    
+    if (X < MatrixSize - 1) then
+    begin
+      for RY := StartY downto 0 do
+      begin
+        RIdx := RY * MatrixSize + (X + 1);
+        if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+        begin
+          LNextColors[RIdx] := PColor;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  procedure PlacePreservedWater(TargetIdx: Integer; Color: TColor; FallbackY: Integer);
+  begin
+    // Try original spot
+    if TInterlocked.CompareExchange(LNextSand[TargetIdx], MAT_WATER, MAT_EMPTY) = MAT_EMPTY then
+      LNextColors[TargetIdx] := Color
+    else
+      // Spot stolen by a neighbor! Trigger Rescue
+      RescueParticle(MAT_WATER, Color, FallbackY);
+  end;
+
 begin
   LSand := PIntArray(PSand);
   LNextSand := PIntArray(PNextSand);
   LColors := PColorArray(PColors);
   LNextColors := PColorArray(PNextColors);
 
+  // PASS 1: Reserve Stones (immobile anchors)
+  for Y := 0 to MatrixSize - 1 do
+  begin
+    CurrentIdx := Y * MatrixSize + X;
+    if LSand[CurrentIdx] = MAT_STONE then
+    begin
+      LNextSand[CurrentIdx] := MAT_STONE;
+      LNextColors[CurrentIdx] := LColors[CurrentIdx];
+    end;
+  end;
+
+  // PASS 2: Dynamic simulation
   for Y := MatrixSize - 1 downto 0 do
   begin
     CurrentIdx := Y * MatrixSize + X;
     mat := LSand[CurrentIdx];
     
-    if mat = MAT_EMPTY then Continue;
-
-    // STONE: Static and batch copied (no atomic needed if strictly in-place)
-    if mat = MAT_STONE then
-    begin
-      if LNextSand[CurrentIdx] = MAT_EMPTY then
-      begin
-        LNextSand[CurrentIdx] := MAT_STONE;
-        LNextColors[CurrentIdx] := LColors[CurrentIdx];
-      end;
-      Continue;
-    end;
+    if (mat = MAT_EMPTY) or (mat = MAT_STONE) then Continue;
 
     FoundSpot := False;
     if Y < MatrixSize - 1 then
     begin
+      // 1. VERTICAL FALL / DISPLACEMENT
       BottomIdx := (Y + 1) * MatrixSize + X;
       targetMat := LSand[BottomIdx];
       
-      // 1. VERTICAL
       if (targetMat = MAT_EMPTY) or ((mat = MAT_SAND) and (targetMat = MAT_WATER)) then
       begin
-        if TInterlocked.CompareExchange(LNextSand[BottomIdx], mat, MAT_EMPTY) = MAT_EMPTY then
+        OldVal := TInterlocked.CompareExchange(LNextSand[BottomIdx], mat, MAT_EMPTY);
+        if OldVal = MAT_EMPTY then
         begin
-          if (mat = MAT_SAND) and (targetMat = MAT_WATER) then
-          begin
-            if TInterlocked.CompareExchange(LNextSand[CurrentIdx], MAT_WATER, MAT_EMPTY) = MAT_EMPTY then
-              LNextColors[CurrentIdx] := clSkyBlue;
-          end;
           LNextColors[BottomIdx] := LColors[CurrentIdx];
           CanMove := 1;
           FoundSpot := True;
         end
-        else if (mat = MAT_SAND) and (TInterlocked.CompareExchange(LNextSand[BottomIdx], MAT_SAND, MAT_WATER) = MAT_WATER) then
+        else if (mat = MAT_SAND) and (OldVal = MAT_WATER) then
         begin
-           if TInterlocked.CompareExchange(LNextSand[CurrentIdx], MAT_WATER, MAT_EMPTY) = MAT_EMPTY then
-             LNextColors[CurrentIdx] := clSkyBlue;
-           LNextColors[BottomIdx] := LColors[CurrentIdx];
-           CanMove := 1;
-           FoundSpot := True;
+          // Strict swap: Sand takes Water's slot
+          if TInterlocked.CompareExchange(LNextSand[BottomIdx], MAT_SAND, MAT_WATER) = MAT_WATER then
+          begin
+            PlacePreservedWater(CurrentIdx, clSkyBlue, Y);
+            LNextColors[BottomIdx] := LColors[CurrentIdx];
+            CanMove := 1;
+            FoundSpot := True;
+          end;
         end;
       end;
 
       // 2. DIAGONAL
       if not FoundSpot then
       begin
-        // 5% chance of diagonal for sand in water
         if (mat <> MAT_SAND) or (targetMat <> MAT_WATER) or (Random(20) = 0) then
         begin
           Dir := IfThen(Random(2) = 0, -1, 1);
@@ -112,26 +167,24 @@ begin
               targetMat := LSand[BottomIdx];
               if (targetMat = MAT_EMPTY) or ((mat = MAT_SAND) and (targetMat = MAT_WATER)) then
               begin
-                if TInterlocked.CompareExchange(LNextSand[BottomIdx], mat, MAT_EMPTY) = MAT_EMPTY then
+                OldVal := TInterlocked.CompareExchange(LNextSand[BottomIdx], mat, MAT_EMPTY);
+                if OldVal = MAT_EMPTY then
                 begin
-                  if (mat = MAT_SAND) and (targetMat = MAT_WATER) then
-                  begin
-                    if TInterlocked.CompareExchange(LNextSand[CurrentIdx], MAT_WATER, MAT_EMPTY) = MAT_EMPTY then
-                      LNextColors[CurrentIdx] := clSkyBlue;
-                  end;
                   LNextColors[BottomIdx] := LColors[CurrentIdx];
                   CanMove := 1;
                   FoundSpot := True;
                   Break;
                 end
-                else if (mat = MAT_SAND) and (TInterlocked.CompareExchange(LNextSand[BottomIdx], MAT_SAND, MAT_WATER) = MAT_WATER) then
+                else if (mat = MAT_SAND) and (OldVal = MAT_WATER) then
                 begin
-                   if TInterlocked.CompareExchange(LNextSand[CurrentIdx], MAT_WATER, MAT_EMPTY) = MAT_EMPTY then
-                     LNextColors[CurrentIdx] := clSkyBlue;
-                   LNextColors[BottomIdx] := LColors[CurrentIdx];
-                   CanMove := 1;
-                   FoundSpot := True;
-                   Break;
+                  if TInterlocked.CompareExchange(LNextSand[BottomIdx], MAT_SAND, MAT_WATER) = MAT_WATER then
+                  begin
+                    PlacePreservedWater(CurrentIdx, clSkyBlue, Y);
+                    LNextColors[BottomIdx] := LColors[CurrentIdx];
+                    CanMove := 1;
+                    FoundSpot := True;
+                    Break;
+                  end;
                 end;
               end;
             end;
@@ -140,7 +193,7 @@ begin
       end;
     end;
 
-    // 3. AGGRESSIVE WATER LEVELING
+    // 3. FLUID LEVELING
     if (mat = MAT_WATER) and (not FoundSpot) then
     begin
       Dir := IfThen(Random(2) = 0, 1, -1);
@@ -148,12 +201,10 @@ begin
       begin
         Offset := IfThen(i = 0, Dir, -Dir);
         NewX := X + Offset;
-        // Optimized search limit
         while (Abs(NewX - X) <= 15) and (NewX >= 0) and (NewX < MatrixSize) do
         begin
           if LSand[Y * MatrixSize + NewX] <> MAT_EMPTY then
           begin
-            // Optimization: Only stop if it's Stone or Sand (don't stop for other water)
             if LSand[Y * MatrixSize + NewX] <> MAT_WATER then Break;
           end
           else
@@ -172,12 +223,14 @@ begin
       end;
     end;
 
-    // 4. STAY PUT
+    // 4. STAY PUT (With Rescue)
     if not FoundSpot then
     begin
-      // Atomic check to avoid overwriting evicted water
       if TInterlocked.CompareExchange(LNextSand[CurrentIdx], mat, MAT_EMPTY) = MAT_EMPTY then
-        LNextColors[CurrentIdx] := LColors[CurrentIdx];
+        LNextColors[CurrentIdx] := LColors[CurrentIdx]
+      else
+        // If our current spot was stolen by a falling/moving particle, we MUST be rescued
+        RescueParticle(mat, LColors[CurrentIdx], Y);
     end;
   end;
 end;
