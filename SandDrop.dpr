@@ -12,6 +12,9 @@ uses
   USand.Physics in 'USand.Physics.pas',
   USand.Renderer in 'USand.Renderer.pas',
   USand.Engine in 'USand.Engine.pas',
+  UFluid.Constants in 'UFluid.Constants.pas',
+  UFluid.Engine in 'UFluid.Engine.pas',
+  UFluid.Renderer in 'UFluid.Renderer.pas',
   Vcl.Themes,
   Vcl.Styles,
   FluidForm in 'FluidForm.pas' {Form2};

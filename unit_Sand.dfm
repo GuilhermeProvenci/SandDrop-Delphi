@@ -151,7 +151,7 @@ object Form1: TForm1
       Left = 0
       Top = 260
       Width = 200
-      Height = 180
+      Height = 220
       Align = alTop
       BevelOuter = bvNone
       ParentBackground = False
@@ -197,6 +197,15 @@ object Form1: TForm1
         TabOrder = 2
         OnClick = btnSpawnObstacleClick
       end
+      object btnOpenFluidLab: TButton
+        Left = 10
+        Top = 172
+        Width = 180
+        Height = 35
+        Caption = 'Laborat'#243'rio de Fluidos'
+        TabOrder = 3
+        OnClick = btnOpenFluidLabClick
+      end
     end
   end
   object Panel1: TPanel
@@ -213,7 +222,9 @@ object Form1: TForm1
       Width = 776
       Height = 707
       Align = alClient
+      OnMouseDown = PaintBox1MouseDown
       OnMouseMove = PaintBox1MouseMove
+      OnMouseUp = PaintBox1MouseUp
       OnPaint = PaintBox1Paint
     end
     object lblFPS: TLabel

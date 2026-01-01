@@ -30,15 +30,19 @@ type
     rbWater: TRadioButton;
     rbStone: TRadioButton;
     btnSpawnObstacle: TButton;
+    btnOpenFluidLab: TButton;
     procedure PaintBox1Paint(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure PaintBox1MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure PaintBox1MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure Timer1Timer(Sender: TObject);
     procedure btnResetClick(Sender: TObject);
     procedure btnRainClick(Sender: TObject);
     procedure RainTimerTimer(Sender: TObject);
     procedure btnSpawnObstacleClick(Sender: TObject);
+    procedure btnOpenFluidLabClick(Sender: TObject);
   private
     { Private declarations }
     FEngine: TSandEngine;
@@ -50,6 +54,10 @@ type
     FStopwatch: TStopwatch;
     FFrameCount: Integer;
     FLastFPSUpdate: Int64;
+    
+    // Mouse State
+    FMouseX, FMouseY: Integer;
+    FIsMouseDown: Boolean;
     
     procedure UpdateFPS;
     function GetSelectedMaterial: Integer;
@@ -64,6 +72,8 @@ var
   Form1: TForm1;
 
 implementation
+
+uses FluidForm;
 
 {$R *.dfm}
 
@@ -134,13 +144,39 @@ begin
 end;
 
 procedure TForm1.PaintBox1MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
-var
-  SimX, SimY: Integer;
 begin
-  if (ssLeft in Shift) and (PaintBox1.Width > 0) and (PaintBox1.Height > 0) then
+  FMouseX := X;
+  FMouseY := Y;
+  if ssLeft in Shift then
+    Timer1.Enabled := True;
+end;
+
+procedure TForm1.PaintBox1MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if Button = mbLeft then
   begin
-    SimX := (X * MatrixSize) div PaintBox1.Width;
-    SimY := (Y * MatrixSize) div PaintBox1.Height;
+    FIsMouseDown := True;
+    FMouseX := X;
+    FMouseY := Y;
+    Timer1.Enabled := True;
+  end;
+end;
+
+procedure TForm1.PaintBox1MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if Button = mbLeft then
+    FIsMouseDown := False;
+end;
+
+procedure TForm1.Timer1Timer(Sender: TObject);
+var
+  Step, SimX, SimY: Integer;
+begin
+  // Continuous Drop
+  if FIsMouseDown and (PaintBox1.Width > 0) and (PaintBox1.Height > 0) then
+  begin
+    SimX := (FMouseX * MatrixSize) div PaintBox1.Width;
+    SimY := (FMouseY * MatrixSize) div PaintBox1.Height;
     
     if SimX < 0 then SimX := 0;
     if SimX >= MatrixSize then SimX := MatrixSize - 1;
@@ -148,14 +184,8 @@ begin
     if SimY >= MatrixSize then SimY := MatrixSize - 1;
     
     FEngine.DropMaterial(SimX, SimY, tbrRadius.Position, GetSelectedMaterial, GetSelectedColor);
-    Timer1.Enabled := True;
   end;
-end;
 
-procedure TForm1.Timer1Timer(Sender: TObject);
-var
-  Step: Integer;
-begin
   FHueValue := (FHueValue + 1) mod 360;
   for Step := 1 to StepsPerFrame do 
     FEngine.Update;
@@ -199,6 +229,13 @@ begin
     end;
     
   PaintBox1.Invalidate;
+end;
+
+procedure TForm1.btnOpenFluidLabClick(Sender: TObject);
+begin
+  if not Assigned(Form2) then
+    Form2 := TForm2.Create(Application);
+  Form2.Show;
 end;
 
 function TForm1.HSVToColor(H, S, V: Single): TColor;
