@@ -43,12 +43,13 @@ var
   LColors, LNextColors: PColorArray;
   OldVal: Integer;
 
-  // The Search-and-Rescue mechanism (Vertical Eruption)
+  // Multi-Column Rescue: searches current AND neighboring columns to eliminate vertical gaps
   procedure RescueParticle(PType: Integer; PColor: TColor; StartY: Integer);
   var
-    RY, RIdx: Integer;
+    RY, RIdx, RX, Side: Integer;
+    TryLeft, TryRight: Boolean;
   begin
-    // Scan UPWARDS from StartY to find the first available hole in the next buffer
+    // Pass 1: Current Column (Priority)
     for RY := StartY downto 0 do
     begin
       RIdx := RY * MatrixSize + X;
@@ -59,29 +60,54 @@ var
       end;
     end;
     
-    // Extreme Emergency: search immediate neighbors if current column is completely full
-    if (X > 0) then
+    // Pass 2: Neighbor Columns (The Lifeboat)
+    // Randomize which side to try first to prevent vertical streaks
+    TryLeft := (X > 0);
+    TryRight := (X < MatrixSize - 1);
+    
+    for Side := 0 to 1 do
     begin
-      for RY := StartY downto 0 do
+      if (Side = 0) and TryLeft and (Random(2) = 0) then
       begin
-        RIdx := RY * MatrixSize + (X - 1);
-        if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+        RX := X - 1;
+        for RY := StartY downto 0 do
         begin
-          LNextColors[RIdx] := PColor;
-          Exit;
+          RIdx := RY * MatrixSize + RX;
+          if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+          begin
+            LNextColors[RIdx] := PColor;
+            Exit;
+          end;
+        end;
+        TryLeft := False;
+      end;
+      
+      if (Side = 1) and TryRight then
+      begin
+        RX := X + 1;
+        for RY := StartY downto 0 do
+        begin
+          RIdx := RY * MatrixSize + RX;
+          if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+          begin
+            LNextColors[RIdx] := PColor;
+            Exit;
+          end;
         end;
       end;
-    end;
-    
-    if (X < MatrixSize - 1) then
-    begin
-      for RY := StartY downto 0 do
+      
+      // If we didn't try left in the randomized first step, try it now
+      if (Side = 1) and TryLeft then
       begin
-        RIdx := RY * MatrixSize + (X + 1);
-        if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+        RX := X - 1;
+        for RY := StartY downto 0 do
         begin
-          LNextColors[RIdx] := PColor;
-          Exit;
+          RIdx := RY * MatrixSize + RX;
+          if TInterlocked.CompareExchange(LNextSand[RIdx], PType, MAT_EMPTY) = MAT_EMPTY then
+          begin
+            LNextColors[RIdx] := PColor;
+            Exit;
+          end;
         end;
       end;
     end;
@@ -89,11 +115,9 @@ var
 
   procedure PlacePreservedWater(TargetIdx: Integer; Color: TColor; FallbackY: Integer);
   begin
-    // Try original spot
     if TInterlocked.CompareExchange(LNextSand[TargetIdx], MAT_WATER, MAT_EMPTY) = MAT_EMPTY then
       LNextColors[TargetIdx] := Color
     else
-      // Spot stolen by a neighbor! Trigger Rescue
       RescueParticle(MAT_WATER, Color, FallbackY);
   end;
 
@@ -103,7 +127,7 @@ begin
   LColors := PColorArray(PColors);
   LNextColors := PColorArray(PNextColors);
 
-  // PASS 1: Reserve Stones (immobile anchors)
+  // PRE-PASS: Statics (Stones)
   for Y := 0 to MatrixSize - 1 do
   begin
     CurrentIdx := Y * MatrixSize + X;
@@ -114,7 +138,7 @@ begin
     end;
   end;
 
-  // PASS 2: Dynamic simulation
+  // DYNAMIC PASS
   for Y := MatrixSize - 1 downto 0 do
   begin
     CurrentIdx := Y * MatrixSize + X;
@@ -140,7 +164,7 @@ begin
         end
         else if (mat = MAT_SAND) and (OldVal = MAT_WATER) then
         begin
-          // Strict swap: Sand takes Water's slot
+          // Double-check swap for mass conservation
           if TInterlocked.CompareExchange(LNextSand[BottomIdx], MAT_SAND, MAT_WATER) = MAT_WATER then
           begin
             PlacePreservedWater(CurrentIdx, clSkyBlue, Y);
@@ -151,7 +175,7 @@ begin
         end;
       end;
 
-      // 2. DIAGONAL
+      // 2. DIAGONAL (Randomized direction)
       if not FoundSpot then
       begin
         if (mat <> MAT_SAND) or (targetMat <> MAT_WATER) or (Random(20) = 0) then
@@ -193,7 +217,7 @@ begin
       end;
     end;
 
-    // 3. FLUID LEVELING
+    // 3. WATER LEVELING (Optimized)
     if (mat = MAT_WATER) and (not FoundSpot) then
     begin
       Dir := IfThen(Random(2) = 0, 1, -1);
@@ -205,7 +229,8 @@ begin
         begin
           if LSand[Y * MatrixSize + NewX] <> MAT_EMPTY then
           begin
-            if LSand[Y * MatrixSize + NewX] <> MAT_WATER then Break;
+            // Optimization: Skip checking if it's fluid, only stop for solids
+            if (LSand[Y * MatrixSize + NewX] = MAT_STONE) or (LSand[Y * MatrixSize + NewX] = MAT_SAND) then Break;
           end
           else
           begin
@@ -223,13 +248,13 @@ begin
       end;
     end;
 
-    // 4. STAY PUT (With Rescue)
+    // 4. STAY PUT (Final Fallback)
     if not FoundSpot then
     begin
       if TInterlocked.CompareExchange(LNextSand[CurrentIdx], mat, MAT_EMPTY) = MAT_EMPTY then
         LNextColors[CurrentIdx] := LColors[CurrentIdx]
       else
-        // If our current spot was stolen by a falling/moving particle, we MUST be rescued
+        // If our cell was stolen by a falling particle, we MUST be rescued (can look sideways now)
         RescueParticle(mat, LColors[CurrentIdx], Y);
     end;
   end;
